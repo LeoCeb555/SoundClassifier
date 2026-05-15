@@ -103,28 +103,39 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc){
 }
 
 // Interrupt when the timer detects the trigger falling edge
-void HAL_TIM_Trigger_Callback(TIM_HandleTypeDef* htim){
-	if(htim->Instance == TIM1){
+void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef* htim){
+	if(htim->Instance == TIM1 && htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1){
 		// Start DMA transfer of sampling start notification to UART port
-		HAL_UART_Transmit_DMA(&huart3, (uint8_t*)SAMPLING_MESSAGE, START_MESSAGE_LENGTH);
+		//HAL_UART_Transmit_DMA(&huart3, (uint8_t*)SAMPLING_MESSAGE, START_MESSAGE_LENGTH);
+
+		full = 1;
 	}
 }
 
 // Interrupts when timer overflows
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim){
 	if(htim->Instance == TIM1){
-		// Manually stop timer 1 to prevent looping
-		HAL_TIM_Base_Stop_IT(htim);
+
 		// Manually stop ADC-DMA transfer (stop recording samples) to setup for next sampling period
-		HAL_ADC_Stop_DMA(&hadc1);
+		//HAL_ADC_Stop_DMA(&hadc1);
+
+		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5); // TESTING
 
 		// Start DMA transfer of sampling end notification to UART
-		HAL_UART_Transmit_DMA(&huart3, (uint8_t*)SAMPLING_MESSAGE + START_MESSAGE_LENGTH, END_MESSAGE_LENGTH);
+		//HAL_UART_Transmit_DMA(&huart3, (uint8_t*)SAMPLING_MESSAGE + START_MESSAGE_LENGTH, END_MESSAGE_LENGTH);
 
 		// Re-arm DMA by linking it to sampling buffer to hold ADC conversions
-		HAL_ADC_Start_DMA(&hadc1, (uint32_t*)sample_buffer, SAMPLE_BUFFER_SIZE);
-		// Re-arm timer 1
-		HAL_TIM_Base_Start_IT(htim);
+		//HAL_ADC_Start_DMA(&hadc1, (uint32_t*)sample_buffer, SAMPLE_BUFFER_SIZE);
+		// Re-arm timer 1 channel 1
+		HAL_TIM_IC_Start_IT(htim, TIM_CHANNEL_1);
+	}
+}
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
+	if(GPIO_Pin == B1_Pin){
+
+		//HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5); // TESTING
+
 	}
 }
 
@@ -166,6 +177,20 @@ int main(void)
   MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
 
+  // Point timer slave mode controller to TI1FP1
+  TIM1->SMCR &= ~TIM_SMCR_TS; // Clear old trigger source selection
+  TIM1->SMCR |= (5 << TIM_SMCR_TS_Pos);
+
+  // Set slave mode to trigger mode
+  TIM1->SMCR &= ~TIM_SMCR_SMS; // Clear old slave mode
+  TIM1->SMCR |= (6 << TIM_SMCR_SMS_Pos);
+
+  // Arm DMA by linking it to sampling buffer to hold ADC conversions
+  //HAL_ADC_Start_DMA(&hadc1, (uint32_t*)sample_buffer, SAMPLE_BUFFER_SIZE);
+
+  // Arm timer 1 channel 1
+  HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_1);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -173,6 +198,12 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
+	  if (full == 1){
+		  HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5); // TESTING
+		  HAL_Delay(1000);
+		  HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5); // TESTING
+		  HAL_Delay(1000);
+	  }
 
     /* USER CODE BEGIN 3 */
   }
@@ -291,8 +322,8 @@ static void MX_TIM1_Init(void)
   /* USER CODE END TIM1_Init 0 */
 
   TIM_ClockConfigTypeDef sClockSourceConfig = {0};
-  TIM_SlaveConfigTypeDef sSlaveConfig = {0};
   TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_IC_InitTypeDef sConfigIC = {0};
 
   /* USER CODE BEGIN TIM1_Init 1 */
 
@@ -313,21 +344,25 @@ static void MX_TIM1_Init(void)
   {
     Error_Handler();
   }
-  if (HAL_TIM_OnePulse_Init(&htim1, TIM_OPMODE_SINGLE) != HAL_OK)
+  if (HAL_TIM_IC_Init(&htim1) != HAL_OK)
   {
     Error_Handler();
   }
-  sSlaveConfig.SlaveMode = TIM_SLAVEMODE_TRIGGER;
-  sSlaveConfig.InputTrigger = TIM_TS_TI1FP1;
-  sSlaveConfig.TriggerPolarity = TIM_TRIGGERPOLARITY_FALLING;
-  sSlaveConfig.TriggerFilter = 15;
-  if (HAL_TIM_SlaveConfigSynchro(&htim1, &sSlaveConfig) != HAL_OK)
+  if (HAL_TIM_OnePulse_Init(&htim1, TIM_OPMODE_SINGLE) != HAL_OK)
   {
     Error_Handler();
   }
   sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_ENABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_FALLING;
+  sConfigIC.ICSelection = TIM_ICSELECTION_DIRECTTI;
+  sConfigIC.ICPrescaler = TIM_ICPSC_DIV1;
+  sConfigIC.ICFilter = 15;
+  if (HAL_TIM_IC_ConfigChannel(&htim1, &sConfigIC, TIM_CHANNEL_1) != HAL_OK)
   {
     Error_Handler();
   }
@@ -441,11 +476,21 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
+
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PA5 */
+  GPIO_InitStruct.Pin = GPIO_PIN_5;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
