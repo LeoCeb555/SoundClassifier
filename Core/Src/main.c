@@ -108,7 +108,8 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef* htim){
 		// Start DMA transfer of sampling start notification to UART port
 		//HAL_UART_Transmit_DMA(&huart3, (uint8_t*)SAMPLING_MESSAGE, START_MESSAGE_LENGTH);
 
-		full = 1;
+		// Re-arm timer 1 channel 1
+		HAL_TIM_IC_Start_IT(htim, TIM_CHANNEL_1);
 	}
 }
 
@@ -119,22 +120,11 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim){
 		// Manually stop ADC-DMA transfer (stop recording samples) to setup for next sampling period
 		//HAL_ADC_Stop_DMA(&hadc1);
 
-		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5); // TESTING
-
 		// Start DMA transfer of sampling end notification to UART
 		//HAL_UART_Transmit_DMA(&huart3, (uint8_t*)SAMPLING_MESSAGE + START_MESSAGE_LENGTH, END_MESSAGE_LENGTH);
 
 		// Re-arm DMA by linking it to sampling buffer to hold ADC conversions
 		//HAL_ADC_Start_DMA(&hadc1, (uint32_t*)sample_buffer, SAMPLE_BUFFER_SIZE);
-		// Re-arm timer 1 channel 1
-		HAL_TIM_IC_Start_IT(htim, TIM_CHANNEL_1);
-	}
-}
-
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
-	if(GPIO_Pin == B1_Pin){
-
-		//HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5); // TESTING
 
 	}
 }
@@ -191,6 +181,9 @@ int main(void)
   // Arm timer 1 channel 1
   HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_1);
 
+  // Manually enable update interrupt
+  __HAL_TIM_ENABLE_IT(&htim1, TIM_IT_UPDATE);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -198,12 +191,6 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-	  if (full == 1){
-		  HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5); // TESTING
-		  HAL_Delay(1000);
-		  HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5); // TESTING
-		  HAL_Delay(1000);
-	  }
 
     /* USER CODE BEGIN 3 */
   }
@@ -329,9 +316,9 @@ static void MX_TIM1_Init(void)
 
   /* USER CODE END TIM1_Init 1 */
   htim1.Instance = TIM1;
-  htim1.Init.Prescaler = 0;
+  htim1.Init.Prescaler = 8399;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 65535;
+  htim1.Init.Period = 49999;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
