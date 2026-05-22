@@ -68,8 +68,7 @@ DMA_HandleTypeDef hdma_usart2_tx;
 volatile int half_full = 0; // flag for half full sample buffer DMA interrupt
 volatile int full = 0; // flag for full sample buffer DMA interrupt
 
-volatile int true = 0;
-volatile HAL_StatusTypeDef status;
+volatile int timer_busy = 0; // flag to track if timer is currently running
 
 uint16_t sample_buffer[SAMPLE_BUFFER_SIZE]; // buffer to hold raw samples
 featureVector transmit_buffer[TRANSMIT_BUFFER_SIZE]; // buffer to hold feature vectors
@@ -109,7 +108,10 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc){
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef* htim){
 	if(htim->Instance == TIM1 && htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1){
 
-		if(!(HAL_TIM_Base_GetState(htim) == HAL_TIM_STATE_BUSY)){ // make sure timer is not running
+		if(!timer_busy){ // Make sure timer is not running
+
+			timer_busy = 1;
+
 			// Start transmitting sampling start notification
 			HAL_UART_Transmit_DMA(&huart2, (uint8_t*)SAMPLING_MESSAGE, START_MESSAGE_LENGTH);
 		}
@@ -122,6 +124,8 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef* htim){
 // Interrupts when timer overflows
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim){
 	if(htim->Instance == TIM1){
+
+		timer_busy = 0;
 
 		// Stop recording samples
 		//HAL_ADC_Stop_DMA(&hadc1);
