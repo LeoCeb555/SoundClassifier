@@ -42,9 +42,9 @@ typedef struct {
 
 #define SAMPLE_BUFFER_SIZE 100
 #define TRANSMIT_BUFFER_SIZE 200
-#define SAMPLING_MESSAGE "Sampling has started.\nSampling has ended.\n"
-#define START_MESSAGE_LENGTH 22
-#define END_MESSAGE_LENGTH 20
+#define SAMPLING_MESSAGE "Sampling has started.\r\nSampling has ended.\r\n"
+#define START_MESSAGE_LENGTH 23
+#define END_MESSAGE_LENGTH 21
 
 /* USER CODE END PD */
 
@@ -61,12 +61,15 @@ TIM_HandleTypeDef htim1;
 
 UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart3;
-DMA_HandleTypeDef hdma_usart3_tx;
+DMA_HandleTypeDef hdma_usart2_tx;
 
 /* USER CODE BEGIN PV */
 
 volatile int half_full = 0; // flag for half full sample buffer DMA interrupt
 volatile int full = 0; // flag for full sample buffer DMA interrupt
+
+volatile int true = 0;
+volatile HAL_StatusTypeDef status;
 
 uint16_t sample_buffer[SAMPLE_BUFFER_SIZE]; // buffer to hold raw samples
 featureVector transmit_buffer[TRANSMIT_BUFFER_SIZE]; // buffer to hold feature vectors
@@ -105,10 +108,13 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc){
 // Interrupt when the timer detects the trigger falling edge
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef* htim){
 	if(htim->Instance == TIM1 && htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1){
-		// Start DMA transfer of sampling start notification to UART port
-		//HAL_UART_Transmit_DMA(&huart3, (uint8_t*)SAMPLING_MESSAGE, START_MESSAGE_LENGTH);
 
-		// Re-arm timer 1 channel 1
+		if(!(HAL_TIM_Base_GetState(htim) == HAL_TIM_STATE_BUSY)){ // make sure timer is not running
+			// Start transmitting sampling start notification
+			HAL_UART_Transmit_DMA(&huart2, (uint8_t*)SAMPLING_MESSAGE, START_MESSAGE_LENGTH);
+		}
+
+		// Re-arm timer
 		HAL_TIM_IC_Start_IT(htim, TIM_CHANNEL_1);
 	}
 }
@@ -117,13 +123,13 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef* htim){
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim){
 	if(htim->Instance == TIM1){
 
-		// Manually stop ADC-DMA transfer (stop recording samples) to setup for next sampling period
+		// Stop recording samples
 		//HAL_ADC_Stop_DMA(&hadc1);
 
-		// Start DMA transfer of sampling end notification to UART
-		//HAL_UART_Transmit_DMA(&huart3, (uint8_t*)SAMPLING_MESSAGE + START_MESSAGE_LENGTH, END_MESSAGE_LENGTH);
+		// Start transmitting sampling end notification
+		HAL_UART_Transmit_DMA(&huart2, (uint8_t*)SAMPLING_MESSAGE + START_MESSAGE_LENGTH, END_MESSAGE_LENGTH);
 
-		// Re-arm DMA by linking it to sampling buffer to hold ADC conversions
+		// Re-arm DMA for ADC conversions
 		//HAL_ADC_Start_DMA(&hadc1, (uint32_t*)sample_buffer, SAMPLE_BUFFER_SIZE);
 
 	}
@@ -379,7 +385,7 @@ static void MX_USART2_UART_Init(void)
   huart2.Init.WordLength = UART_WORDLENGTH_8B;
   huart2.Init.StopBits = UART_STOPBITS_1;
   huart2.Init.Parity = UART_PARITY_NONE;
-  huart2.Init.Mode = UART_MODE_TX_RX;
+  huart2.Init.Mode = UART_MODE_TX;
   huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
   huart2.Init.OverSampling = UART_OVERSAMPLING_16;
   if (HAL_UART_Init(&huart2) != HAL_OK)
@@ -436,9 +442,9 @@ static void MX_DMA_Init(void)
   __HAL_RCC_DMA1_CLK_ENABLE();
 
   /* DMA interrupt init */
-  /* DMA1_Stream3_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Stream3_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Stream3_IRQn);
+  /* DMA1_Stream6_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Stream6_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Stream6_IRQn);
   /* DMA2_Stream4_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA2_Stream4_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA2_Stream4_IRQn);
