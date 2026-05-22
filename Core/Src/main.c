@@ -69,6 +69,7 @@ volatile int half_full = 0; // flag for half full sample buffer DMA interrupt
 volatile int full = 0; // flag for full sample buffer DMA interrupt
 
 volatile int timer_busy = 0; // flag to track if timer is currently running
+volatile uint32_t dr_read = 0;
 
 uint16_t sample_buffer[SAMPLE_BUFFER_SIZE]; // buffer to hold raw samples
 featureVector transmit_buffer[TRANSMIT_BUFFER_SIZE]; // buffer to hold feature vectors
@@ -118,6 +119,7 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef* htim){
 
 		// Re-arm timer
 		HAL_TIM_IC_Start_IT(htim, TIM_CHANNEL_1);
+		HAL_TIM_OC_Start_IT(htim, TIM_CHANNEL_2);
 	}
 }
 
@@ -125,16 +127,16 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef* htim){
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim){
 	if(htim->Instance == TIM1){
 
-		timer_busy = 0;
-
 		// Stop recording samples
-		//HAL_ADC_Stop_DMA(&hadc1);
+		HAL_ADC_Stop_DMA(&hadc1);
+
+		timer_busy = 0;
 
 		// Start transmitting sampling end notification
 		HAL_UART_Transmit_DMA(&huart2, (uint8_t*)SAMPLING_MESSAGE + START_MESSAGE_LENGTH, END_MESSAGE_LENGTH);
 
 		// Re-arm DMA for ADC conversions
-		//HAL_ADC_Start_DMA(&hadc1, (uint32_t*)sample_buffer, SAMPLE_BUFFER_SIZE);
+		HAL_ADC_Start_DMA(&hadc1, (uint32_t*)sample_buffer, SAMPLE_BUFFER_SIZE);
 
 	}
 }
@@ -185,11 +187,14 @@ int main(void)
   TIM1->SMCR &= ~TIM_SMCR_SMS; // Clear old slave mode
   TIM1->SMCR |= (6 << TIM_SMCR_SMS_Pos);
 
-  // Arm DMA by linking it to sampling buffer to hold ADC conversions
-  //HAL_ADC_Start_DMA(&hadc1, (uint32_t*)sample_buffer, SAMPLE_BUFFER_SIZE);
-
   // Arm timer 1 channel 1
   HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_1);
+
+  // Arm timer 1 channel 2
+  HAL_TIM_OC_Start_IT(&htim1, TIM_CHANNEL_2);
+
+  // Arm DMA for ADC conversions
+  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)sample_buffer, SAMPLE_BUFFER_SIZE);
 
   // Manually enable update interrupt
   __HAL_TIM_ENABLE_IT(&htim1, TIM_IT_UPDATE);
@@ -201,6 +206,7 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
+	  dr_read = ADC1->DR;
 
     /* USER CODE BEGIN 3 */
   }
@@ -281,7 +287,7 @@ static void MX_ADC1_Init(void)
   hadc1.Init.ContinuousConvMode = DISABLE;
   hadc1.Init.DiscontinuousConvMode = DISABLE;
   hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING;
-  hadc1.Init.ExternalTrigConv = ADC_EXTERNALTRIGCONV_T1_CC1;
+  hadc1.Init.ExternalTrigConv = ADC_EXTERNALTRIGCONV_T1_CC2;
   hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
   hadc1.Init.NbrOfConversion = 1;
   hadc1.Init.DMAContinuousRequests = ENABLE;
@@ -321,6 +327,8 @@ static void MX_TIM1_Init(void)
   TIM_ClockConfigTypeDef sClockSourceConfig = {0};
   TIM_MasterConfigTypeDef sMasterConfig = {0};
   TIM_IC_InitTypeDef sConfigIC = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+  TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig = {0};
 
   /* USER CODE BEGIN TIM1_Init 1 */
 
@@ -345,6 +353,10 @@ static void MX_TIM1_Init(void)
   {
     Error_Handler();
   }
+  if (HAL_TIM_OC_Init(&htim1) != HAL_OK)
+  {
+    Error_Handler();
+  }
   if (HAL_TIM_OnePulse_Init(&htim1, TIM_OPMODE_SINGLE) != HAL_OK)
   {
     Error_Handler();
@@ -363,9 +375,32 @@ static void MX_TIM1_Init(void)
   {
     Error_Handler();
   }
+  sConfigOC.OCMode = TIM_OCMODE_ACTIVE;
+  sConfigOC.Pulse = 1;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
+  sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
+  if (HAL_TIM_OC_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sBreakDeadTimeConfig.OffStateRunMode = TIM_OSSR_DISABLE;
+  sBreakDeadTimeConfig.OffStateIDLEMode = TIM_OSSI_DISABLE;
+  sBreakDeadTimeConfig.LockLevel = TIM_LOCKLEVEL_OFF;
+  sBreakDeadTimeConfig.DeadTime = 0;
+  sBreakDeadTimeConfig.BreakState = TIM_BREAK_DISABLE;
+  sBreakDeadTimeConfig.BreakPolarity = TIM_BREAKPOLARITY_HIGH;
+  sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
+  if (HAL_TIMEx_ConfigBreakDeadTime(&htim1, &sBreakDeadTimeConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
   /* USER CODE BEGIN TIM1_Init 2 */
 
   /* USER CODE END TIM1_Init 2 */
+  HAL_TIM_MspPostInit(&htim1);
 
 }
 
