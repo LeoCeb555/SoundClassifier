@@ -40,7 +40,7 @@ typedef struct {
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-#define SAMPLE_BUFFER_SIZE 100
+#define SAMPLE_BUFFER_SIZE 3000 // Ensure a 3-second sampling period
 #define TRANSMIT_BUFFER_SIZE 200
 #define SAMPLING_MESSAGE "Sampling has started.\r\nSampling has ended.\r\n"
 #define START_MESSAGE_LENGTH 23
@@ -68,8 +68,7 @@ DMA_HandleTypeDef hdma_usart2_tx;
 volatile int half_full = 0; // flag for half full sample buffer DMA interrupt
 volatile int full = 0; // flag for full sample buffer DMA interrupt
 
-volatile int timer_busy = 0; // flag to track if timer is currently running
-volatile uint32_t dr_read = 0;
+volatile int sampling_started = 0;
 
 uint16_t sample_buffer[SAMPLE_BUFFER_SIZE]; // buffer to hold raw samples
 featureVector transmit_buffer[TRANSMIT_BUFFER_SIZE]; // buffer to hold feature vectors
@@ -101,7 +100,13 @@ void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc){
 // Raises flag whenever sample buffer is completely full and DMA interrupt fires
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc){
 	if(hadc->Instance == ADC1){
+
 		full = 1;
+
+		sampling_started = 0;
+
+		// Start transmitting sampling end notification
+		HAL_UART_Transmit_DMA(&huart2, (uint8_t*)SAMPLING_MESSAGE + START_MESSAGE_LENGTH, END_MESSAGE_LENGTH);
 	}
 }
 
@@ -109,35 +114,16 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc){
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef* htim){
 	if(htim->Instance == TIM1 && htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1){
 
-		if(!timer_busy){ // Make sure timer is not running
+		if(!sampling_started){ // Make sure timer is not running
 
-			timer_busy = 1;
+			sampling_started = 1;
+
+			// Re-arm DMA for ADC conversions
+			HAL_ADC_Start_DMA(&hadc1, (uint32_t*)sample_buffer, SAMPLE_BUFFER_SIZE);
 
 			// Start transmitting sampling start notification
 			HAL_UART_Transmit_DMA(&huart2, (uint8_t*)SAMPLING_MESSAGE, START_MESSAGE_LENGTH);
 		}
-
-		// Re-arm timer
-		HAL_TIM_IC_Start_IT(htim, TIM_CHANNEL_1);
-		HAL_TIM_OC_Start_IT(htim, TIM_CHANNEL_2);
-	}
-}
-
-// Interrupts when timer overflows
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim){
-	if(htim->Instance == TIM1){
-
-		// Stop recording samples
-		HAL_ADC_Stop_DMA(&hadc1);
-
-		timer_busy = 0;
-
-		// Start transmitting sampling end notification
-		HAL_UART_Transmit_DMA(&huart2, (uint8_t*)SAMPLING_MESSAGE + START_MESSAGE_LENGTH, END_MESSAGE_LENGTH);
-
-		// Re-arm DMA for ADC conversions
-		HAL_ADC_Start_DMA(&hadc1, (uint32_t*)sample_buffer, SAMPLE_BUFFER_SIZE);
-
 	}
 }
 
@@ -187,14 +173,14 @@ int main(void)
   TIM1->SMCR &= ~TIM_SMCR_SMS; // Clear old slave mode
   TIM1->SMCR |= (6 << TIM_SMCR_SMS_Pos);
 
+  // Arm DMA for ADC conversions
+  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)sample_buffer, SAMPLE_BUFFER_SIZE);
+
   // Arm timer 1 channel 1
   HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_1);
 
   // Arm timer 1 channel 2
   HAL_TIM_OC_Start_IT(&htim1, TIM_CHANNEL_2);
-
-  // Arm DMA for ADC conversions
-  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)sample_buffer, SAMPLE_BUFFER_SIZE);
 
   // Manually enable update interrupt
   __HAL_TIM_ENABLE_IT(&htim1, TIM_IT_UPDATE);
@@ -206,7 +192,6 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-	  dr_read = ADC1->DR;
 
     /* USER CODE BEGIN 3 */
   }
@@ -336,7 +321,7 @@ static void MX_TIM1_Init(void)
   htim1.Instance = TIM1;
   htim1.Init.Prescaler = 8399;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 49999;
+  htim1.Init.Period = 4;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -357,10 +342,6 @@ static void MX_TIM1_Init(void)
   {
     Error_Handler();
   }
-  if (HAL_TIM_OnePulse_Init(&htim1, TIM_OPMODE_SINGLE) != HAL_OK)
-  {
-    Error_Handler();
-  }
   sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_ENABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
@@ -375,7 +356,7 @@ static void MX_TIM1_Init(void)
   {
     Error_Handler();
   }
-  sConfigOC.OCMode = TIM_OCMODE_ACTIVE;
+  sConfigOC.OCMode = TIM_OCMODE_TOGGLE;
   sConfigOC.Pulse = 1;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
