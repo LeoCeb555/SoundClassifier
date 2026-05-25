@@ -41,10 +41,12 @@ typedef struct {
 /* USER CODE BEGIN PD */
 
 #define SAMPLE_BUFFER_SIZE 3000 // Ensure a 3-second sampling period
-#define TRANSMIT_BUFFER_SIZE 200
 #define SAMPLING_MESSAGE "Sampling has started.\r\nSampling has ended.\r\n"
-#define START_MESSAGE_LENGTH 23
-#define END_MESSAGE_LENGTH 21
+#define S_START_MESSAGE_LENGTH 23
+#define S_END_MESSAGE_LENGTH 21
+#define PROCESSING_MESSAGE "Processing has started.\r\nProcessing has ended.\r\n"
+#define P_START_MESSAGE_LENGTH 25
+#define P_END_MESSAGE_LENGTH 23
 
 /* USER CODE END PD */
 
@@ -65,13 +67,16 @@ DMA_HandleTypeDef hdma_usart2_tx;
 
 /* USER CODE BEGIN PV */
 
-volatile int half_full = 0; // flag for half full sample buffer DMA interrupt
-volatile int full = 0; // flag for full sample buffer DMA interrupt
+volatile int half_full = 0; // flag raised when sample buffer is half full
+volatile int full = 0; // flag raised when sample buffer is full
 
-volatile int sampling_started = 0;
+volatile int sampling_started = 0; // flag prevents collisions from multiple button presses
 
-uint16_t sample_buffer[SAMPLE_BUFFER_SIZE]; // buffer to hold raw samples
-featureVector transmit_buffer[TRANSMIT_BUFFER_SIZE]; // buffer to hold feature vectors
+volatile uint16_t energy = 0; // holds energy value for each sample frame
+volatile uint16_t zcr = 0; // holds zero-crossing rate value for each sample frame
+volatile uint16_t previous = 0; // temp needed for zcr calculation
+
+uint16_t sample_buffer[SAMPLE_BUFFER_SIZE]; // holds raw samples
 
 /* USER CODE END PV */
 
@@ -93,7 +98,11 @@ static void MX_USART3_UART_Init(void);
 // Raises flag whenever sample buffer is half full and DMA interrupt fires
 void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc){
 	if(hadc->Instance == ADC1){
+
 		half_full = 1;
+
+		// Send processing start notification
+		HAL_UART_Transmit_DMA(&huart2, (uint8_t*)PROCESSING_MESSAGE, P_START_MESSAGE_LENGTH);
 	}
 }
 
@@ -106,7 +115,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc){
 		sampling_started = 0;
 
 		// Start transmitting sampling end notification
-		HAL_UART_Transmit_DMA(&huart2, (uint8_t*)SAMPLING_MESSAGE + START_MESSAGE_LENGTH, END_MESSAGE_LENGTH);
+		HAL_UART_Transmit_DMA(&huart2, (uint8_t*)SAMPLING_MESSAGE + S_START_MESSAGE_LENGTH, S_END_MESSAGE_LENGTH);
 	}
 }
 
@@ -122,7 +131,7 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef* htim){
 			HAL_ADC_Start_DMA(&hadc1, (uint32_t*)sample_buffer, SAMPLE_BUFFER_SIZE);
 
 			// Start transmitting sampling start notification
-			HAL_UART_Transmit_DMA(&huart2, (uint8_t*)SAMPLING_MESSAGE, START_MESSAGE_LENGTH);
+			HAL_UART_Transmit_DMA(&huart2, (uint8_t*)SAMPLING_MESSAGE, S_START_MESSAGE_LENGTH);
 		}
 	}
 }
@@ -191,8 +200,67 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    /* USER CODE END WHILE */
+	  if(half_full == 1){ // can safely process first half of samples
 
+		  // handle initial sample
+		  previous = sample_buffer[0];
+		  energy += previous * previous;
+
+		  for(int i = 1; i < (SAMPLE_BUFFER_SIZE / 2); i++){
+
+			  uint16_t current = sample_buffer[i];
+
+			  // Update energy
+			  energy += current * current;
+
+			  // Update zcr
+			  if((previous > 0 && current < 0) || (previous < 0 && current > 0)){ // if a sign change occurs
+				  zcr++;
+			  }
+
+			  previous = current;
+		  }
+
+		  half_full = 0; // first half of samples are processed
+	  }
+
+	  if(full == 1){ // can safely process second half of samples
+
+		  for(int i = (SAMPLE_BUFFER_SIZE / 2); i < SAMPLE_BUFFER_SIZE; i++){
+
+			  uint16_t current = sample_buffer[i];
+
+			  // update energy
+			  energy += current * current;
+
+			  // update zcr
+			  if((previous * current) < 0){ // is only negative if signs are different
+				  zcr++;
+			  }
+
+			  previous = current;
+		  }
+
+		  zcr /= SAMPLE_BUFFER_SIZE;
+
+		  featureVector currentVector;
+		  currentVector.energy = energy;
+		  currentVector.zcr = zcr;
+
+		  // Transmit feature vector
+		  //HAL_UART_Transmit_DMA(&huart3, (uint16_t*)&currentVector, sizeof(currentVector);
+
+		  // Reset counters for next frame
+		  energy = 0;
+		  zcr = 0;
+		  full = 0;
+
+		  // Send processing end notification
+		  HAL_UART_Transmit_DMA(&huart2, (uint8_t*)PROCESSING_MESSAGE + P_START_MESSAGE_LENGTH, P_END_MESSAGE_LENGTH);
+
+	  }
+
+    /* USER CODE END WHILE */
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
