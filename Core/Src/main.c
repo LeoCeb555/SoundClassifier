@@ -55,7 +55,6 @@ typedef struct {
 #define P_END_MESSAGE_LENGTH 23
 
 #define ARM_MATH_CM4
-#define FFT_LENGTH 4096
 #define SAMPLING_RATE 4000
 
 /* USER CODE END PD */
@@ -79,7 +78,6 @@ DMA_HandleTypeDef hdma_usart3_tx;
 /* USER CODE BEGIN PV */
 
 volatile int full = 0; // flag raised when sample buffer is full
-
 volatile int sampling_started = 0; // flag prevents collisions from multiple button presses
 
 //MISC
@@ -265,12 +263,9 @@ int main(void)
 		  float dominant_frequency = (max_bin * SAMPLING_RATE) / SAMPLE_BUFFER_SIZE;
 
 		  // calculate number of chars needed
-		  int chars = snprintf(NULL, 0, "%u", energy);
-		  chars += snprintf(NULL, 0, "%f", zcr);
-		  chars += snprintf(NULL, 0, "%u", energy);
-		  chars += snprintf(NULL, 0, "%f", dominant_frequency);
+		  int chars = snprintf(NULL, 0, "%u,%f,%u,%f\r\n", energy, zcr, peak, dominant_frequency);
 
-		  char feature_string[chars];
+		  char feature_string[chars + 1];
 
 		  // pack features into string
 		  snprintf(feature_string, sizeof(feature_string), "%u,%f,%u,%f\r\n", energy, zcr, peak, dominant_frequency);
@@ -279,7 +274,7 @@ int main(void)
 
 		  //total = end - start;
 
-		  //HAL_UART_Transmit_DMA(&huart3, (uint8_t*)feature_string, chars); // transmit feature data
+		  HAL_UART_Transmit_DMA(&huart3, (uint8_t*)feature_string, chars); // transmit feature data
 
 		  full = 0;
 
