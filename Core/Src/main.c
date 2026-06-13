@@ -45,11 +45,13 @@ typedef struct {
 /* USER CODE BEGIN PD */
 
 #define SAMPLE_BUFFER_SIZE 4096
-#define SAMPLING_MESSAGE "Sampling has started.\r\nSampling has ended.\r\n"
+#define SAMPLING_MESSAGE "Sampling has started.\r\n"
 #define S_START_MESSAGE_LENGTH 23
-#define S_END_MESSAGE_LENGTH 21
-#define PROCESSING_MESSAGE "Processing has started.\r\nProcessing has ended.\r\n"
-#define P_START_MESSAGE_LENGTH 25
+
+#define INTERMEDIATE_MESSAGE "Sampling has ended.\r\nProcessing has started.\r\n"
+#define INTER_MESSAGE_LENGTH 46
+
+#define P_END_MESSAGE "Processing has ended.\r\n"
 #define P_END_MESSAGE_LENGTH 23
 
 #define ARM_MATH_CM4
@@ -76,17 +78,14 @@ DMA_HandleTypeDef hdma_usart3_tx;
 
 /* USER CODE BEGIN PV */
 
-volatile int test = 0;
 volatile int full = 0; // flag raised when sample buffer is full
 
 volatile int sampling_started = 0; // flag prevents collisions from multiple button presses
-volatile int size = 0;
 
-volatile HAL_StatusTypeDef status2;
-volatile HAL_StatusTypeDef status;
-volatile uint32_t start = 0;
-volatile uint32_t end = 0;
-volatile uint32_t total = 0;
+//MISC
+//volatile uint32_t start = 0;
+//volatile uint32_t end = 0;
+//volatile uint32_t total = 0;
 
 uint16_t sample_buffer[SAMPLE_BUFFER_SIZE]; // holds raw samples
 float centered_samples[SAMPLE_BUFFER_SIZE]; // holds samples after DC offset removal
@@ -116,10 +115,8 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc){
 
 		sampling_started = 0;
 
-		// Start transmitting sampling end notification
-		HAL_UART_Transmit_DMA(&huart2, (uint8_t*)SAMPLING_MESSAGE + S_START_MESSAGE_LENGTH, S_END_MESSAGE_LENGTH);
-		// Send processing start notification
-		HAL_UART_Transmit_DMA(&huart2, (uint8_t*)PROCESSING_MESSAGE, P_START_MESSAGE_LENGTH);
+		// Send intermediate notification
+		HAL_UART_Transmit_DMA(&huart2, (uint8_t*)INTERMEDIATE_MESSAGE, INTER_MESSAGE_LENGTH);
 	}
 }
 
@@ -206,7 +203,7 @@ int main(void)
   {
 	  if(full == 1){ // can safely process samples
 
-		  start = HAL_GetTick();
+		  //start = HAL_GetTick();
 
 		  // calculate DC offset
 		  uint32_t sum = 0;
@@ -278,16 +275,15 @@ int main(void)
 		  // pack features into string
 		  snprintf(feature_string, sizeof(feature_string), "%u,%f,%u,%f\r\n", energy, zcr, peak, dominant_frequency);
 
-		  end = HAL_GetTick();
+		  //end = HAL_GetTick();
 
-		  total = end - start;
+		  //total = end - start;
 
 		  //HAL_UART_Transmit_DMA(&huart3, (uint8_t*)feature_string, chars); // transmit feature data
 
 		  full = 0;
 
-		  // send processing end notification
-		  HAL_UART_Transmit_DMA(&huart2, (uint8_t*)PROCESSING_MESSAGE + P_START_MESSAGE_LENGTH, P_END_MESSAGE_LENGTH);
+		  HAL_UART_Transmit_DMA(&huart2, (uint8_t*)P_END_MESSAGE, P_END_MESSAGE_LENGTH); // send processing end notification
 	  }
 
     /* USER CODE END WHILE */
