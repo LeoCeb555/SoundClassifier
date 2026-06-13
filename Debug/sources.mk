@@ -22,6 +22,21 @@ C_DEPS :=
 
 # Every subdirectory with source files must be described here
 SUBDIRS := \
+Core/Src/Source/BasicMathFunctions \
+Core/Src/Source/BayesFunctions \
+Core/Src/Source/CommonTables \
+Core/Src/Source/ComplexMathFunctions \
+Core/Src/Source/ControllerFunctions \
+Core/Src/Source/DistanceFunctions \
+Core/Src/Source/FastMathFunctions \
+Core/Src/Source/FilteringFunctions \
+Core/Src/Source/InterpolationFunctions \
+Core/Src/Source/MatrixFunctions \
+Core/Src/Source/QuaternionMathFunctions \
+Core/Src/Source/SVMFunctions \
+Core/Src/Source/StatisticsFunctions \
+Core/Src/Source/SupportFunctions \
+Core/Src/Source/TransformFunctions \
 Core/Src \
 Core/Startup \
 Drivers/STM32F4xx_HAL_Driver/Src \

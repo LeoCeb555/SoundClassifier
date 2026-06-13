@@ -29,7 +29,33 @@ Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/main.h \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_pwr_ex.h \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim.h \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim_ex.h \
- ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_uart.h
+ ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_uart.h \
+ ../Core/Inc/Include/arm_math.h ../Core/Inc/Include/arm_math_types.h \
+ ../Drivers/CMSIS/Include/cmsis_compiler.h \
+ ../Core/Inc/Include/arm_math_memory.h ../Core/Inc/Include/dsp/none.h \
+ ../Core/Inc/Include/arm_math_types.h ../Core/Inc/Include/dsp/utils.h \
+ ../Core/Inc/Include/dsp/basic_math_functions.h \
+ ../Core/Inc/Include/arm_math_memory.h ../Core/Inc/Include/dsp/none.h \
+ ../Core/Inc/Include/dsp/utils.h \
+ ../Core/Inc/Include/dsp/interpolation_functions.h \
+ ../Core/Inc/Include/dsp/bayes_functions.h \
+ ../Core/Inc/Include/dsp/statistics_functions.h \
+ ../Core/Inc/Include/dsp/basic_math_functions.h \
+ ../Core/Inc/Include/dsp/fast_math_functions.h \
+ ../Core/Inc/Include/dsp/matrix_functions.h \
+ ../Core/Inc/Include/dsp/complex_math_functions.h \
+ ../Core/Inc/Include/dsp/statistics_functions.h \
+ ../Core/Inc/Include/dsp/controller_functions.h \
+ ../Core/Inc/Include/dsp/support_functions.h \
+ ../Core/Inc/Include/dsp/distance_functions.h \
+ ../Core/Inc/Include/dsp/svm_functions.h \
+ ../Core/Inc/Include/dsp/svm_defines.h \
+ ../Core/Inc/Include/dsp/fast_math_functions.h \
+ ../Core/Inc/Include/dsp/transform_functions.h \
+ ../Core/Inc/Include/dsp/complex_math_functions.h \
+ ../Core/Inc/Include/dsp/filtering_functions.h \
+ ../Core/Inc/Include/dsp/support_functions.h \
+ ../Core/Inc/Include/dsp/quaternion_math_functions.h
 ../Core/Inc/main.h:
 ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal.h:
 ../Core/Inc/stm32f4xx_hal_conf.h:
@@ -62,3 +88,33 @@ Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/main.h \
 ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim.h:
 ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim_ex.h:
 ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_uart.h:
+../Core/Inc/Include/arm_math.h:
+../Core/Inc/Include/arm_math_types.h:
+../Drivers/CMSIS/Include/cmsis_compiler.h:
+../Core/Inc/Include/arm_math_memory.h:
+../Core/Inc/Include/dsp/none.h:
+../Core/Inc/Include/arm_math_types.h:
+../Core/Inc/Include/dsp/utils.h:
+../Core/Inc/Include/dsp/basic_math_functions.h:
+../Core/Inc/Include/arm_math_memory.h:
+../Core/Inc/Include/dsp/none.h:
+../Core/Inc/Include/dsp/utils.h:
+../Core/Inc/Include/dsp/interpolation_functions.h:
+../Core/Inc/Include/dsp/bayes_functions.h:
+../Core/Inc/Include/dsp/statistics_functions.h:
+../Core/Inc/Include/dsp/basic_math_functions.h:
+../Core/Inc/Include/dsp/fast_math_functions.h:
+../Core/Inc/Include/dsp/matrix_functions.h:
+../Core/Inc/Include/dsp/complex_math_functions.h:
+../Core/Inc/Include/dsp/statistics_functions.h:
+../Core/Inc/Include/dsp/controller_functions.h:
+../Core/Inc/Include/dsp/support_functions.h:
+../Core/Inc/Include/dsp/distance_functions.h:
+../Core/Inc/Include/dsp/svm_functions.h:
+../Core/Inc/Include/dsp/svm_defines.h:
+../Core/Inc/Include/dsp/fast_math_functions.h:
+../Core/Inc/Include/dsp/transform_functions.h:
+../Core/Inc/Include/dsp/complex_math_functions.h:
+../Core/Inc/Include/dsp/filtering_functions.h:
+../Core/Inc/Include/dsp/support_functions.h:
+../Core/Inc/Include/dsp/quaternion_math_functions.h:

@@ -11,6 +11,21 @@ RM := rm -rf
 -include sources.mk
 -include Drivers/STM32F4xx_HAL_Driver/Src/subdir.mk
 -include Core/Startup/subdir.mk
+-include Core/Src/Source/TransformFunctions/subdir.mk
+-include Core/Src/Source/SupportFunctions/subdir.mk
+-include Core/Src/Source/StatisticsFunctions/subdir.mk
+-include Core/Src/Source/SVMFunctions/subdir.mk
+-include Core/Src/Source/QuaternionMathFunctions/subdir.mk
+-include Core/Src/Source/MatrixFunctions/subdir.mk
+-include Core/Src/Source/InterpolationFunctions/subdir.mk
+-include Core/Src/Source/FilteringFunctions/subdir.mk
+-include Core/Src/Source/FastMathFunctions/subdir.mk
+-include Core/Src/Source/DistanceFunctions/subdir.mk
+-include Core/Src/Source/ControllerFunctions/subdir.mk
+-include Core/Src/Source/ComplexMathFunctions/subdir.mk
+-include Core/Src/Source/CommonTables/subdir.mk
+-include Core/Src/Source/BayesFunctions/subdir.mk
+-include Core/Src/Source/BasicMathFunctions/subdir.mk
 -include Core/Src/subdir.mk
 -include objects.mk
 
@@ -61,7 +76,7 @@ main-build: SoundClassifier.elf secondary-outputs
 
 # Tool invocations
 SoundClassifier.elf SoundClassifier.map: $(OBJS) $(USER_OBJS) /Users/vivianacebrero/Documents/UCI/Research/SoundClassifier/STM32F446RETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "SoundClassifier.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"/Users/vivianacebrero/Documents/UCI/Research/SoundClassifier/STM32F446RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="SoundClassifier.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+	arm-none-eabi-gcc -o "SoundClassifier.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"/Users/vivianacebrero/Documents/UCI/Research/SoundClassifier/STM32F446RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="SoundClassifier.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -u _printf_float -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 

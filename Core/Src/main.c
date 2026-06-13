@@ -23,7 +23,9 @@
 /* USER CODE BEGIN Includes */
 
 #include <stdint.h>
-
+#include <stdio.h>
+#include <stdlib.h>
+#include "arm_math.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -32,6 +34,8 @@
 typedef struct {
 	uint16_t energy; // the amount of energy produced by the sound
 	uint16_t zcr; // rate of sound's inversion from positive to negative
+	uint16_t peak_amplitude;
+	uint16_t dominant_frequency;
 } featureVector; // vector to hold extracted features from raw data
 
 
@@ -40,13 +44,17 @@ typedef struct {
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-#define SAMPLE_BUFFER_SIZE 3000 // Ensure a 3-second sampling period
+#define SAMPLE_BUFFER_SIZE 4096
 #define SAMPLING_MESSAGE "Sampling has started.\r\nSampling has ended.\r\n"
 #define S_START_MESSAGE_LENGTH 23
 #define S_END_MESSAGE_LENGTH 21
 #define PROCESSING_MESSAGE "Processing has started.\r\nProcessing has ended.\r\n"
 #define P_START_MESSAGE_LENGTH 25
 #define P_END_MESSAGE_LENGTH 23
+
+#define ARM_MATH_CM4
+#define FFT_LENGTH 4096
+#define SAMPLING_RATE 4000
 
 /* USER CODE END PD */
 
@@ -64,19 +72,24 @@ TIM_HandleTypeDef htim1;
 UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart3;
 DMA_HandleTypeDef hdma_usart2_tx;
+DMA_HandleTypeDef hdma_usart3_tx;
 
 /* USER CODE BEGIN PV */
 
-volatile int half_full = 0; // flag raised when sample buffer is half full
+volatile int test = 0;
 volatile int full = 0; // flag raised when sample buffer is full
 
 volatile int sampling_started = 0; // flag prevents collisions from multiple button presses
+volatile int size = 0;
 
-volatile uint16_t energy = 0; // holds energy value for each sample frame
-volatile uint16_t zcr = 0; // holds zero-crossing rate value for each sample frame
-volatile uint16_t previous = 0; // temp needed for zcr calculation
+volatile HAL_StatusTypeDef status2;
+volatile HAL_StatusTypeDef status;
+volatile uint32_t start = 0;
+volatile uint32_t end = 0;
+volatile uint32_t total = 0;
 
 uint16_t sample_buffer[SAMPLE_BUFFER_SIZE]; // holds raw samples
+float centered_samples[SAMPLE_BUFFER_SIZE]; // holds samples after DC offset removal
 
 /* USER CODE END PV */
 
@@ -95,17 +108,6 @@ static void MX_USART3_UART_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-// Raises flag whenever sample buffer is half full and DMA interrupt fires
-void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc){
-	if(hadc->Instance == ADC1){
-
-		half_full = 1;
-
-		// Send processing start notification
-		HAL_UART_Transmit_DMA(&huart2, (uint8_t*)PROCESSING_MESSAGE, P_START_MESSAGE_LENGTH);
-	}
-}
-
 // Raises flag whenever sample buffer is completely full and DMA interrupt fires
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc){
 	if(hadc->Instance == ADC1){
@@ -116,6 +118,8 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc){
 
 		// Start transmitting sampling end notification
 		HAL_UART_Transmit_DMA(&huart2, (uint8_t*)SAMPLING_MESSAGE + S_START_MESSAGE_LENGTH, S_END_MESSAGE_LENGTH);
+		// Send processing start notification
+		HAL_UART_Transmit_DMA(&huart2, (uint8_t*)PROCESSING_MESSAGE, P_START_MESSAGE_LENGTH);
 	}
 }
 
@@ -200,67 +204,94 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  if(half_full == 1){ // can safely process first half of samples
+	  if(full == 1){ // can safely process samples
+
+		  start = HAL_GetTick();
+
+		  // calculate DC offset
+		  uint32_t sum = 0;
+
+		  for (int i = 0; i < SAMPLE_BUFFER_SIZE; i++){
+			  sum += sample_buffer[i];
+		  }
+
+		  uint16_t offset = sum / SAMPLE_BUFFER_SIZE;
+
+		  for (int i = 0; i < SAMPLE_BUFFER_SIZE; i++){ // remove DC offset from each sample
+
+			  centered_samples[i] = (float)(int16_t)sample_buffer[i] - offset; // cast for signed arithmetic
+		  }
 
 		  // handle initial sample
-		  previous = sample_buffer[0];
-		  energy += previous * previous;
+		  int16_t previous = centered_samples[0];
+		  uint16_t energy = (uint16_t)(previous * previous);  // total energy
+		  uint16_t peak = abs(previous); // peak amplitude
+		  uint16_t inversions = 0; // used to calculate zero-crossing rate
 
-		  for(int i = 1; i < (SAMPLE_BUFFER_SIZE / 2); i++){
+		  for(int i = 1; i < SAMPLE_BUFFER_SIZE; i++){ // frame features calculation
 
-			  uint16_t current = sample_buffer[i];
-
-			  // Update energy
-			  energy += current * current;
-
-			  // Update zcr
-			  if((previous > 0 && current < 0) || (previous < 0 && current > 0)){ // if a sign change occurs
-				  zcr++;
-			  }
-
-			  previous = current;
-		  }
-
-		  half_full = 0; // first half of samples are processed
-	  }
-
-	  if(full == 1){ // can safely process second half of samples
-
-		  for(int i = (SAMPLE_BUFFER_SIZE / 2); i < SAMPLE_BUFFER_SIZE; i++){
-
-			  uint16_t current = sample_buffer[i];
+			  int16_t current = centered_samples[i];
 
 			  // update energy
-			  energy += current * current;
+			  energy += (uint16_t)(current * current);
 
-			  // update zcr
-			  if((previous * current) < 0){ // is only negative if signs are different
-				  zcr++;
+			  // update inversions
+			  if((previous > 0 && current < 0) || (previous < 0 && current > 0)){ // a sign change occurs
+				  inversions++;
+			  }
+
+			  // update peak amplitude
+			  if(abs(current) > peak){
+				  peak = abs(current);
 			  }
 
 			  previous = current;
 		  }
 
-		  zcr /= SAMPLE_BUFFER_SIZE;
+		  float zcr = inversions / SAMPLE_BUFFER_SIZE;
 
-		  featureVector currentVector;
-		  currentVector.energy = energy;
-		  currentVector.zcr = zcr;
+		  // process fft (convert amplitude to frequency)
+		  arm_rfft_fast_instance_f32 fft;
+		  arm_rfft_fast_init_f32(&fft, SAMPLE_BUFFER_SIZE); // initialize instance
 
-		  // Transmit feature vector
-		  //HAL_UART_Transmit_DMA(&huart3, (uint16_t*)&currentVector, sizeof(currentVector);
+		  arm_rfft_fast_f32(&fft, centered_samples, centered_samples, 0); // do fft
 
-		  // Reset counters for next frame
-		  energy = 0;
-		  zcr = 0;
+		  float magnitude_arr[SAMPLE_BUFFER_SIZE / 2];
+
+		  arm_cmplx_mag_f32(centered_samples, magnitude_arr, SAMPLE_BUFFER_SIZE / 2); // calculate frequency magnitudes
+
+		  float max_magnitude;
+		  uint32_t max_bin;
+
+		  arm_max_f32(magnitude_arr, SAMPLE_BUFFER_SIZE / 2, &max_magnitude, &max_bin); // get bin with greatest magnitude
+
+		  float dominant_frequency = (max_bin * SAMPLING_RATE) / SAMPLE_BUFFER_SIZE;
+
+		  // calculate number of chars needed
+		  int chars = snprintf(NULL, 0, "%u", energy);
+		  chars += snprintf(NULL, 0, "%f", zcr);
+		  chars += snprintf(NULL, 0, "%u", energy);
+		  chars += snprintf(NULL, 0, "%f", dominant_frequency);
+
+		  char feature_string[chars];
+
+		  // pack features into string
+		  snprintf(feature_string, sizeof(feature_string), "%u,%f,%u,%f\r\n", energy, zcr, peak, dominant_frequency);
+
+		  end = HAL_GetTick();
+
+		  total = end - start;
+
+		  //HAL_UART_Transmit_DMA(&huart3, (uint8_t*)feature_string, chars); // transmit feature data
+
 		  full = 0;
 
-		  // Send processing end notification
+		  // send processing end notification
 		  HAL_UART_Transmit_DMA(&huart2, (uint8_t*)PROCESSING_MESSAGE + P_START_MESSAGE_LENGTH, P_END_MESSAGE_LENGTH);
-
 	  }
 
     /* USER CODE END WHILE */
+
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -387,9 +418,9 @@ static void MX_TIM1_Init(void)
 
   /* USER CODE END TIM1_Init 1 */
   htim1.Instance = TIM1;
-  htim1.Init.Prescaler = 8399;
+  htim1.Init.Prescaler = 10499;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 4;
+  htim1.Init.Period = 1;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -530,6 +561,9 @@ static void MX_DMA_Init(void)
   __HAL_RCC_DMA1_CLK_ENABLE();
 
   /* DMA interrupt init */
+  /* DMA1_Stream3_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Stream3_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Stream3_IRQn);
   /* DMA1_Stream6_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Stream6_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Stream6_IRQn);
