@@ -214,21 +214,21 @@ int main(void)
 
 		  for (int i = 0; i < SAMPLE_BUFFER_SIZE; i++){ // remove DC offset from each sample
 
-			  centered_samples[i] = (float)(int16_t)sample_buffer[i] - offset; // cast for signed arithmetic
+			  centered_samples[i] = (float)(int32_t)sample_buffer[i] - offset; // cast for signed arithmetic
 		  }
 
 		  // handle initial sample
 		  int16_t previous = centered_samples[0];
-		  uint16_t energy = (uint16_t)(previous * previous);  // total energy
-		  uint16_t peak = abs(previous); // peak amplitude
+		  uint32_t energy = (uint32_t)(previous * previous);  // total energy
+		  uint32_t peak = abs(previous); // peak amplitude
 		  uint16_t inversions = 0; // used to calculate zero-crossing rate
 
 		  for(int i = 1; i < SAMPLE_BUFFER_SIZE; i++){ // frame features calculation
 
-			  int16_t current = centered_samples[i];
+			  int32_t current = centered_samples[i];
 
 			  // update energy
-			  energy += (uint16_t)(current * current);
+			  energy += (uint32_t)(current * current);
 
 			  // update inversions
 			  if((previous > 0 && current < 0) || (previous < 0 && current > 0)){ // a sign change occurs
@@ -243,7 +243,7 @@ int main(void)
 			  previous = current;
 		  }
 
-		  float zcr = inversions / SAMPLE_BUFFER_SIZE;
+		  float zcr = (float)inversions / SAMPLE_BUFFER_SIZE;
 
 		  // process fft (convert amplitude to frequency)
 		  arm_rfft_fast_instance_f32 fft;
@@ -263,12 +263,12 @@ int main(void)
 		  float dominant_frequency = (max_bin * SAMPLING_RATE) / SAMPLE_BUFFER_SIZE;
 
 		  // calculate number of chars needed
-		  int chars = snprintf(NULL, 0, "%u,%f,%u,%f\r\n", energy, zcr, peak, dominant_frequency);
+		  int chars = snprintf(NULL, 0, "%lu,%f,%lu,%f\r\n", energy, zcr, peak, dominant_frequency);
 
 		  char feature_string[chars + 1];
 
 		  // pack features into string
-		  snprintf(feature_string, sizeof(feature_string), "%u,%f,%u,%f\r\n", energy, zcr, peak, dominant_frequency);
+		  snprintf(feature_string, sizeof(feature_string), "%lu,%f,%lu,%f\r\n", energy, zcr, peak, dominant_frequency);
 
 		  //end = HAL_GetTick();
 
