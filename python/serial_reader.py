@@ -65,14 +65,28 @@ if ser2.is_open and ser3.is_open:
 
             line = ser3.readline()
             line = line.decode('utf-8')
-            features = line.replace("\r\n", "").split(",", 3) # clean up data
+            features = line.replace("\r\n", "").split(",", 5) # clean up data
             print(f"Features: {features}")
             
-            cursor.execute(f"""INSERT INTO {sound}_feature_data(energy, zcr, peak, dominant_frequency, label)
-                        VALUES({features[0]}, {features[1]}, {features[2]}, {features[3]}, '{sound}')""")
+            cursor.execute(f"""INSERT INTO {sound}_feature_table(
+                           energy,
+                           zcr,
+                           peak,
+                           dominant_frequency,
+                           spectral_centroid,
+                           spectral_bandwidth,
+                           label)
+                        VALUES(
+                        {features[0]},
+                        {features[1]},
+                        {features[2]},
+                        {features[3]},
+                        {features[4]},
+                        {features[5]},
+                        '{sound}')""")
             connection.commit() # save changes to database
-            print(f"\nSucessfully inserted into {sound}_feature_data. Row ID: {cursor.lastrowid}\n")
-
+            print(f"\nSucessfully inserted into {sound}_feature_table. Row ID: {cursor.lastrowid}\n")
+        
         time.sleep(0.01)
 
 connection.close()
