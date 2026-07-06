@@ -25,6 +25,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #include "arm_math.h"
 /* USER CODE END Includes */
 
@@ -87,6 +88,10 @@ volatile int sampling_started = 0; // flag prevents collisions from multiple but
 
 uint16_t sample_buffer[SAMPLE_BUFFER_SIZE]; // holds raw samples
 float centered_samples[SAMPLE_BUFFER_SIZE]; // holds samples after DC offset removal
+float fft_output_arr[SAMPLE_BUFFER_SIZE]; // temp array needed for fft
+float magnitude_arr[SAMPLE_BUFFER_SIZE / 2];
+
+char feature_string[150]; // packed string for feature transmission
 
 /* USER CODE END PV */
 
@@ -193,6 +198,9 @@ int main(void)
   // Manually enable update interrupt
   __HAL_TIM_ENABLE_IT(&htim1, TIM_IT_UPDATE);
 
+  arm_rfft_fast_instance_f32 fft;
+  arm_rfft_fast_init_f32(&fft, SAMPLE_BUFFER_SIZE); // initialize instance for fft calculation
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -218,17 +226,17 @@ int main(void)
 		  }
 
 		  // handle initial sample
-		  int16_t previous = centered_samples[0];
-		  uint32_t energy = (uint32_t)(previous * previous);  // total energy
-		  uint32_t peak = abs(previous); // peak amplitude
+		  float previous = centered_samples[0];
+		  float energy = previous * previous;  // total energy
+		  float peak = fabsf(previous); // peak amplitude
 		  uint16_t inversions = 0; // used to calculate zero-crossing rate
 
 		  for(int i = 1; i < SAMPLE_BUFFER_SIZE; i++){ // frame features calculation
 
-			  int32_t current = centered_samples[i];
+			  float current = centered_samples[i];
 
 			  // update energy
-			  energy += (uint32_t)(current * current);
+			  energy += current * current;
 
 			  // update inversions
 			  if((previous > 0 && current < 0) || (previous < 0 && current > 0)){ // a sign change occurs
@@ -236,8 +244,8 @@ int main(void)
 			  }
 
 			  // update peak amplitude
-			  if(abs(current) > peak){
-				  peak = abs(current);
+			  if(fabsf(current) > peak){
+				  peak = fabsf(current);
 			  }
 
 			  previous = current;
@@ -246,29 +254,50 @@ int main(void)
 		  float zcr = (float)inversions / SAMPLE_BUFFER_SIZE;
 
 		  // process fft (convert amplitude to frequency)
-		  arm_rfft_fast_instance_f32 fft;
-		  arm_rfft_fast_init_f32(&fft, SAMPLE_BUFFER_SIZE); // initialize instance
+		  arm_rfft_fast_f32(&fft, centered_samples, fft_output_arr, 0); // do fft
 
-		  arm_rfft_fast_f32(&fft, centered_samples, centered_samples, 0); // do fft
+		  uint32_t num_bins = SAMPLE_BUFFER_SIZE / 2;
 
-		  float magnitude_arr[SAMPLE_BUFFER_SIZE / 2];
-
-		  arm_cmplx_mag_f32(centered_samples, magnitude_arr, SAMPLE_BUFFER_SIZE / 2); // calculate frequency magnitudes
+		  arm_cmplx_mag_f32(fft_output_arr, magnitude_arr, num_bins); // calculate frequency magnitudes
 
 		  float max_magnitude;
 		  uint32_t max_bin;
 
-		  arm_max_f32(magnitude_arr, SAMPLE_BUFFER_SIZE / 2, &max_magnitude, &max_bin); // get bin with greatest magnitude
+		  arm_max_f32(magnitude_arr, num_bins, &max_magnitude, &max_bin); // get bin with greatest magnitude
 
 		  float dominant_frequency = (max_bin * SAMPLING_RATE) / SAMPLE_BUFFER_SIZE;
 
-		  // calculate number of chars needed
-		  int chars = snprintf(NULL, 0, "%lu,%f,%lu,%f\r\n", energy, zcr, peak, dominant_frequency);
+		  // calculate sum of magnitudes and bins
+		  float mag_sum = 0;
+		  float bin_mag_sum = 0;
 
-		  char feature_string[chars + 1];
+		  for(int i = 0; i < num_bins; i++){
+			  mag_sum += magnitude_arr[i];
+			  bin_mag_sum += (float)i * magnitude_arr[i];
+		  }
+
+		  // calculate spectral centroid
+		  float average_bin = bin_mag_sum / mag_sum;
+		  float spectral_centroid = (average_bin * SAMPLING_RATE) / SAMPLE_BUFFER_SIZE;
+
+		  // calculate spectral bandwidth
+		  bin_mag_sum = 0;
+		  for(int i = 0; i < num_bins; i++){
+			  float temp = (float)i - average_bin;
+			  bin_mag_sum += (temp * temp) * magnitude_arr[i];
+		  }
+
+		  float spectral_bandwidth = (SAMPLING_RATE * sqrtf(bin_mag_sum / mag_sum)) / SAMPLE_BUFFER_SIZE;
+
+
+		  // calculate number of chars needed
+		  int chars = snprintf(NULL, 0,
+				  "%f,%f,%f,%f,%f, %f\r\n",
+				  energy, zcr, peak, dominant_frequency, spectral_centroid, spectral_bandwidth);
 
 		  // pack features into string
-		  snprintf(feature_string, sizeof(feature_string), "%lu,%f,%lu,%f\r\n", energy, zcr, peak, dominant_frequency);
+		  snprintf(feature_string, sizeof(feature_string), "%f,%f,%f,%f,%f, %f\r\n",
+				  energy, zcr, peak, dominant_frequency, spectral_centroid, spectral_bandwidth);
 
 		  //end = HAL_GetTick();
 
