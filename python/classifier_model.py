@@ -1,8 +1,9 @@
 from sklearn.tree import DecisionTreeClassifier, plot_tree # Decision tree access
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, confusion_matrix
+from sklearn.model_selection import KFold, cross_val_score # Evaluating model
+from sklearn.metrics import confusion_matrix 
 import matplotlib.pyplot as plt # Visualizing tree
 import pandas # Simplify data analysis
+import numpy as np
 
 # Load data
 dataset = pandas.read_csv('/Users/vivianacebrero/Documents/UCI/Research/SoundClassifier/python/complete_feature_data.csv')
@@ -10,45 +11,60 @@ dataset = pandas.read_csv('/Users/vivianacebrero/Documents/UCI/Research/SoundCla
 X = dataset.drop(columns=['label'])
 y = dataset['label']
 
-# Split data into training and testing sets into equal parts based on labels
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=5, stratify=y
-)
-
 # Create model
 model = DecisionTreeClassifier(
     criterion='entropy',
-    max_depth=4,
+    max_depth=10,
     random_state=5
 )
 
 # Train model
-model.fit(X_train, y_train)
+kf = KFold(n_splits=5, shuffle=True, random_state=5)
+scores = cross_val_score(model, X, y, cv=kf, scoring='accuracy')
 
 # Show results
-y_pred = model.predict(X_test)
-accuracy = accuracy_score(y_test, y_pred)
-print(f"Model Accuracy: {accuracy * 100:.2f}%")
+print(f"\nScores per fold: {scores}")
+print(f"Mean Accuracy: {np.mean(scores):.4f}")
 
-# Compute confusion matrix
-cm = confusion_matrix(y_test, y_pred)
+# Gather fold results
+y_true = []
+y_pred = []
 
-# Divide correct predictions (diagonal) by total true items per class (row sum)
-per_class_accuracy = cm.diagonal() / cm.sum(axis=1)
+for train_idx, test_idx in kf.split(X): # split data into folds
+    X_train, X_test = X.iloc[train_idx], X.iloc[test_idx] # locate actual data using row indices
+    y_train, y_test = y.iloc[train_idx], y.iloc[test_idx] # locate labels of split data
+    
+    model.fit(X_train, y_train)
+    preds = model.predict(X_test)
 
-# Pair with class labels for readability
-classes = y.unique()
-for cls, acc in zip(classes, per_class_accuracy):
-    print(f"Class '{cls}' Accuracy: {acc:.2%}")
+    y_true.extend(y_test)  # save the true values and predictions from this fold
+    y_pred.extend(preds)
 
-"""
-# Visualize the trained tree structure
-plt.figure(figsize=(12, 8))
-plot_tree(
-    model, 
-    feature_names=X.columns.tolist(), 
-    class_names=y.unique(), 
-    filled=True, 
-    rounded=True
-)
-plt.show()"""
+# Compute confusion matrix for the dataset
+cm = confusion_matrix(y_true, y_pred)
+
+classes = np.unique(y_true)
+
+# Calculate class' accuracy
+class_accuracy = cm.diagonal() / cm.sum(axis=1)
+
+print("\nConfusion Matrix:")
+print(cm)
+print("\nClass Performance Summary:")
+
+for label, accuracy in zip(classes, class_accuracy):
+    print(f"'{label}' Accuracy: {accuracy:.4%}")
+
+# Create and save tree plot
+#model.fit(X, y)
+#plt.figure(figsize=(16,10))
+
+#plot_tree(
+    #model,
+    #feature_names=X.columns,
+    #class_names=sorted(y.unique()),
+    #filled=True,
+    #rounded=True
+#)
+
+#plt.savefig('my_plot50.pdf', format='pdf', bbox_inches='tight')
