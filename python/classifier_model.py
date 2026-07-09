@@ -4,6 +4,7 @@ from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as plt # Visualizing tree
 import pandas # Simplify data analysis
 import numpy as np
+import m2cgen as m2c # Convert model to C code
 
 # Load data
 dataset = pandas.read_csv('/Users/vivianacebrero/Documents/UCI/Research/SoundClassifier/python/complete_feature_data.csv')
@@ -15,11 +16,11 @@ y = dataset['label']
 model = DecisionTreeClassifier(
     criterion='entropy',
     max_depth=10,
-    random_state=5
+    random_state=42
 )
 
 # Train model
-kf = KFold(n_splits=5, shuffle=True, random_state=5)
+kf = KFold(n_splits=5, shuffle=True, random_state=42)
 scores = cross_val_score(model, X, y, cv=kf, scoring='accuracy')
 
 # Show results
@@ -68,3 +69,11 @@ for label, accuracy in zip(classes, class_accuracy):
 #)
 
 #plt.savefig('my_plot50.pdf', format='pdf', bbox_inches='tight')
+
+# Convert decision tree model into C code and save the file
+model.fit(X, y)
+
+code = m2c.export_to_c(model, function_name="classify_audio")
+
+with open("/Users/vivianacebrero/Documents/UCI/Research/SoundClassifier/Core/Src/classifier_tree.c", "w") as f:
+    f.write(code)
