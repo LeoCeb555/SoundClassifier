@@ -71,9 +71,9 @@ for label, accuracy in zip(classes, class_accuracy):
 #plt.savefig('my_plot50.pdf', format='pdf', bbox_inches='tight')
 
 # Convert decision tree model into C code and save the file
-model.fit(X, y)
+#model.fit(X, y)
 
-code = m2c.export_to_c(model, function_name="classify_audio")
+#code = m2c.export_to_c(model, function_name="classify_audio")
 
-with open("/Users/vivianacebrero/Documents/UCI/Research/SoundClassifier/Core/Src/classifier_tree.c", "w") as f:
-    f.write(code)
+#with open("/Users/vivianacebrero/Documents/UCI/Research/SoundClassifier/Core/Src/classifier_tree.c", "w") as file:
+    #file.write(code)
