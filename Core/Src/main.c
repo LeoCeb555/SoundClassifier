@@ -26,20 +26,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <string.h>
 #include "arm_math.h"
+#include "classifier_tree.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-
-typedef struct {
-	uint16_t energy; // the amount of energy produced by the sound
-	uint16_t zcr; // rate of sound's inversion from positive to negative
-	uint16_t peak_amplitude;
-	uint16_t dominant_frequency;
-} featureVector; // vector to hold extracted features from raw data
-
-
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -80,6 +73,7 @@ DMA_HandleTypeDef hdma_usart3_tx;
 
 volatile int full = 0; // flag raised when sample buffer is full
 volatile int sampling_started = 0; // flag prevents collisions from multiple button presses
+volatile int collecting = 0; // flag switches between classifying and collecting mode
 
 //MISC
 //volatile uint32_t start = 0;
@@ -91,7 +85,9 @@ float centered_samples[SAMPLE_BUFFER_SIZE]; // holds samples after DC offset rem
 float fft_output_arr[SAMPLE_BUFFER_SIZE]; // temp array needed for fft
 float magnitude_arr[SAMPLE_BUFFER_SIZE / 2];
 
-char feature_string[150]; // packed string for feature transmission
+char helper_string[150]; // string used for packing features or storing predicted label
+
+const char* classes[5] = {"bell", "clap", "door", "snap", "whistle"};
 
 /* USER CODE END PV */
 
@@ -289,21 +285,40 @@ int main(void)
 
 		  float spectral_bandwidth = (SAMPLING_RATE * sqrtf(bin_mag_sum / mag_sum)) / SAMPLE_BUFFER_SIZE;
 
+		  if(!collecting){ // in classifying mode
+			  float sample_features[6] = {energy, zcr, peak, dominant_frequency, spectral_centroid, spectral_bandwidth};
+			  float class_probabilities[5];
 
-		  // calculate number of chars needed
-		  int chars = snprintf(NULL, 0,
-				  "%f,%f,%f,%f,%f, %f\r\n",
-				  energy, zcr, peak, dominant_frequency, spectral_centroid, spectral_bandwidth);
+			  classify_audio(sample_features, class_probabilities); // use decision tree to calculate probabilities
 
-		  // pack features into string
-		  snprintf(feature_string, sizeof(feature_string), "%f,%f,%f,%f,%f, %f\r\n",
-				  energy, zcr, peak, dominant_frequency, spectral_centroid, spectral_bandwidth);
+			  float best_prob = class_probabilities[0];
+			  const char* classification = classes[0];
 
-		  //end = HAL_GetTick();
+			  for(int i = 1; i < 5; i++){ // find class with highest probability
+				  if(class_probabilities[i] > best_prob){
+					  best_prob = class_probabilities[i];
+					  classification = classes[i];
+				  }
+			  }
 
-		  //total = end - start;
+			  strncpy(helper_string, classification, sizeof(helper_string) - 1); // convert pointer to actual label
+		  }
+		  else{ // in collecting mode
+			  // calculate number of chars needed
+			  int chars = snprintf(NULL, 0,
+					  "%f,%f,%f,%f,%f, %f\r\n",
+					  energy, zcr, peak, dominant_frequency, spectral_centroid, spectral_bandwidth);
 
-		  HAL_UART_Transmit_DMA(&huart3, (uint8_t*)feature_string, chars); // transmit feature data
+			  // pack features into string
+			  snprintf(helper_string, sizeof(helper_string), "%f,%f,%f,%f,%f, %f\r\n",
+					  energy, zcr, peak, dominant_frequency, spectral_centroid, spectral_bandwidth);
+
+			  //end = HAL_GetTick();
+
+			  //total = end - start;
+
+			  HAL_UART_Transmit_DMA(&huart3, (uint8_t*)helper_string, chars); // transmit feature data
+		  }
 
 		  full = 0;
 

@@ -576,6 +576,7 @@
 "./Core/Src/Source/TransformFunctions/arm_rfft_init_q31.o"
 "./Core/Src/Source/TransformFunctions/arm_rfft_q15.o"
 "./Core/Src/Source/TransformFunctions/arm_rfft_q31.o"
+"./Core/Src/classifier_tree.o"
 "./Core/Src/main.o"
 "./Core/Src/stm32f4xx_hal_msp.o"
 "./Core/Src/stm32f4xx_it.o"
