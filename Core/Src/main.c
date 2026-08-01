@@ -29,6 +29,7 @@
 #include <string.h>
 #include "arm_math.h"
 #include "classifier_tree.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -50,6 +51,8 @@
 
 #define ARM_MATH_CM4
 #define SAMPLING_RATE 4000
+
+
 
 /* USER CODE END PD */
 
@@ -99,6 +102,7 @@ static void MX_USART2_UART_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_USART3_UART_Init(void);
+
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -136,6 +140,15 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef* htim){
 	}
 }
 
+// Interrupt when external switch is flipped
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
+	if(GPIO_Pin == B2_Pin){
+
+		collecting = !collecting; // switch modes
+	}
+}
+
+
 /* USER CODE END 0 */
 
 /**
@@ -172,6 +185,7 @@ int main(void)
   MX_ADC1_Init();
   MX_TIM1_Init();
   MX_USART3_UART_Init();
+
   /* USER CODE BEGIN 2 */
 
   // Point timer slave mode controller to TI1FP1
@@ -302,6 +316,7 @@ int main(void)
 			  }
 
 			  strncpy(helper_string, classification, sizeof(helper_string) - 1); // convert pointer to actual label
+
 		  }
 		  else{ // in collecting mode
 			  // calculate number of chars needed
@@ -431,11 +446,6 @@ static void MX_ADC1_Init(void)
 
 }
 
-/**
-  * @brief TIM1 Initialization Function
-  * @param None
-  * @retval None
-  */
 static void MX_TIM1_Init(void)
 {
 
@@ -635,6 +645,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
 
+  /*Configure GPIO pin : B2_Pin */
+  GPIO_InitStruct.Pin = B2_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(B2_GPIO_Port, &GPIO_InitStruct);
+
   /*Configure GPIO pin : PA5 */
   GPIO_InitStruct.Pin = GPIO_PIN_5;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
@@ -643,6 +659,9 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI0_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI0_IRQn);
+
   HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
