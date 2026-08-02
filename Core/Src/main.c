@@ -29,7 +29,7 @@
 #include <string.h>
 #include "arm_math.h"
 #include "classifier_tree.h"
-
+#include "i2c_lcd.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -52,7 +52,7 @@
 #define ARM_MATH_CM4
 #define SAMPLING_RATE 4000
 
-
+#define LCD_ADDR (0x27 << 1)
 
 /* USER CODE END PD */
 
@@ -64,6 +64,8 @@
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
 DMA_HandleTypeDef hdma_adc1;
+
+I2C_HandleTypeDef hi2c1;
 
 TIM_HandleTypeDef htim1;
 
@@ -77,6 +79,7 @@ DMA_HandleTypeDef hdma_usart3_tx;
 volatile int full = 0; // flag raised when sample buffer is full
 volatile int sampling_started = 0; // flag prevents collisions from multiple button presses
 volatile int collecting = 0; // flag switches between classifying and collecting mode
+volatile int update_menu = 1; // flag shows update status for lcd display
 
 //MISC
 //volatile uint32_t start = 0;
@@ -102,7 +105,7 @@ static void MX_USART2_UART_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_USART3_UART_Init(void);
-
+static void MX_I2C1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -110,7 +113,7 @@ static void MX_USART3_UART_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-// Raises flag whenever sample buffer is completely full and DMA interrupt fires
+// Sample buffer is full
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc){
 	if(hadc->Instance == ADC1){
 
@@ -118,33 +121,32 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc){
 
 		sampling_started = 0;
 
-		// Send intermediate notification
-		HAL_UART_Transmit_DMA(&huart2, (uint8_t*)INTERMEDIATE_MESSAGE, INTER_MESSAGE_LENGTH);
+		HAL_UART_Transmit_DMA(&huart2, (uint8_t*)INTERMEDIATE_MESSAGE, INTER_MESSAGE_LENGTH); // send intermediate notification
 	}
 }
 
-// Interrupt when the timer detects the trigger falling edge
+// Blue button is pressed
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef* htim){
 	if(htim->Instance == TIM1 && htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1){
 
-		if(!sampling_started){ // Make sure timer is not running
+		if(!sampling_started){ // prevents data corruption
 
 			sampling_started = 1;
 
-			// Re-arm DMA for ADC conversions
-			HAL_ADC_Start_DMA(&hadc1, (uint32_t*)sample_buffer, SAMPLE_BUFFER_SIZE);
+			HAL_ADC_Start_DMA(&hadc1, (uint32_t*)sample_buffer, SAMPLE_BUFFER_SIZE); // re-arm DMA for ADC
 
-			// Start transmitting sampling start notification
-			HAL_UART_Transmit_DMA(&huart2, (uint8_t*)SAMPLING_MESSAGE, S_START_MESSAGE_LENGTH);
+			HAL_UART_Transmit_DMA(&huart2, (uint8_t*)SAMPLING_MESSAGE, S_START_MESSAGE_LENGTH); // send sampling start notification
 		}
 	}
 }
 
-// Interrupt when external switch is flipped
+// External switch is flipped
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 	if(GPIO_Pin == B2_Pin){
 
 		collecting = !collecting; // switch modes
+
+		update_menu = 1; // lcd must be updated
 	}
 }
 
@@ -185,31 +187,33 @@ int main(void)
   MX_ADC1_Init();
   MX_TIM1_Init();
   MX_USART3_UART_Init();
-
+  MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
 
   // Point timer slave mode controller to TI1FP1
-  TIM1->SMCR &= ~TIM_SMCR_TS; // Clear old trigger source selection
+  TIM1->SMCR &= ~TIM_SMCR_TS; // clear old trigger source selection
   TIM1->SMCR |= (5 << TIM_SMCR_TS_Pos);
 
   // Set slave mode to trigger mode
-  TIM1->SMCR &= ~TIM_SMCR_SMS; // Clear old slave mode
+  TIM1->SMCR &= ~TIM_SMCR_SMS; // clear old slave mode
   TIM1->SMCR |= (6 << TIM_SMCR_SMS_Pos);
 
-  // Arm DMA for ADC conversions
+  // Arm DMA for ADC
   HAL_ADC_Start_DMA(&hadc1, (uint32_t*)sample_buffer, SAMPLE_BUFFER_SIZE);
 
-  // Arm timer 1 channel 1
+  // Arm timer 1 channels
   HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_1);
-
-  // Arm timer 1 channel 2
   HAL_TIM_OC_Start_IT(&htim1, TIM_CHANNEL_2);
 
-  // Manually enable update interrupt
+  // Manually enable timer update interrupt
   __HAL_TIM_ENABLE_IT(&htim1, TIM_IT_UPDATE);
 
+  // Initialize instance for fft calculation
   arm_rfft_fast_instance_f32 fft;
-  arm_rfft_fast_init_f32(&fft, SAMPLE_BUFFER_SIZE); // initialize instance for fft calculation
+  arm_rfft_fast_init_f32(&fft, SAMPLE_BUFFER_SIZE);
+
+  // Initialize LCD
+  init();
 
   /* USER CODE END 2 */
 
@@ -217,11 +221,18 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	  if(update_menu){ // update lcd display
+
+		  LCD_SetupMenu(collecting);
+
+		  update_menu = 0;
+	  }
+
 	  if(full == 1){ // can safely process samples
 
 		  //start = HAL_GetTick();
 
-		  // calculate DC offset
+		  // Calculate DC offset
 		  uint32_t sum = 0;
 
 		  for (int i = 0; i < SAMPLE_BUFFER_SIZE; i++){
@@ -235,7 +246,7 @@ int main(void)
 			  centered_samples[i] = (float)(int32_t)sample_buffer[i] - offset; // cast for signed arithmetic
 		  }
 
-		  // handle initial sample
+		  // Handle initial sample
 		  float previous = centered_samples[0];
 		  float energy = previous * previous;  // total energy
 		  float peak = fabsf(previous); // peak amplitude
@@ -263,7 +274,7 @@ int main(void)
 
 		  float zcr = (float)inversions / SAMPLE_BUFFER_SIZE;
 
-		  // process fft (convert amplitude to frequency)
+		  // Process fft (convert amplitude to frequency)
 		  arm_rfft_fast_f32(&fft, centered_samples, fft_output_arr, 0); // do fft
 
 		  uint32_t num_bins = SAMPLE_BUFFER_SIZE / 2;
@@ -317,6 +328,16 @@ int main(void)
 
 			  strncpy(helper_string, classification, sizeof(helper_string) - 1); // convert pointer to actual label
 
+			  // Display classification
+			  LCD_ClearLine(3);
+
+			  if(classification == classes[4]){
+				  LCD_SetCursor(3, 6);
+			  }
+			  else{
+				  LCD_SetCursor(3, 8);
+			  }
+			  LCD_SendString(LCD_ADDR, classification);
 		  }
 		  else{ // in collecting mode
 			  // calculate number of chars needed
@@ -446,6 +467,45 @@ static void MX_ADC1_Init(void)
 
 }
 
+/**
+  * @brief I2C1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C1_Init(void)
+{
+
+  /* USER CODE BEGIN I2C1_Init 0 */
+
+  /* USER CODE END I2C1_Init 0 */
+
+  /* USER CODE BEGIN I2C1_Init 1 */
+
+  /* USER CODE END I2C1_Init 1 */
+  hi2c1.Instance = I2C1;
+  hi2c1.Init.ClockSpeed = 100000;
+  hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
+  hi2c1.Init.OwnAddress1 = 0;
+  hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c1.Init.OwnAddress2 = 0;
+  hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C1_Init 2 */
+
+  /* USER CODE END I2C1_Init 2 */
+
+}
+
+/**
+  * @brief TIM1 Initialization Function
+  * @param None
+  * @retval None
+  */
 static void MX_TIM1_Init(void)
 {
 
