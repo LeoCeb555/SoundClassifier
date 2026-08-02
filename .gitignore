@@ -1,1 +1,12 @@
 /Debug/
+
+# macOS
+.DS_Store
+
+# STM32CubeIDE build output
+Debug/
+Release/
+
+# Python generated files
+__pycache__/
+*.pyc
