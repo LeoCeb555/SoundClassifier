@@ -81,11 +81,6 @@ volatile int sampling_started = 0; // flag prevents collisions from multiple but
 volatile int collecting = 0; // flag switches between classifying and collecting mode
 volatile int update_menu = 1; // flag shows update status for lcd display
 
-//MISC
-//volatile uint32_t start = 0;
-//volatile uint32_t end = 0;
-//volatile uint32_t total = 0;
-
 uint16_t sample_buffer[SAMPLE_BUFFER_SIZE]; // holds raw samples
 float centered_samples[SAMPLE_BUFFER_SIZE]; // holds samples after DC offset removal
 float fft_output_arr[SAMPLE_BUFFER_SIZE]; // temp array needed for fft
@@ -230,8 +225,6 @@ int main(void)
 
 	  if(full == 1){ // can safely process samples
 
-		  //start = HAL_GetTick();
-
 		  // Calculate DC offset
 		  uint32_t sum = 0;
 
@@ -348,10 +341,6 @@ int main(void)
 			  // pack features into string
 			  snprintf(helper_string, sizeof(helper_string), "%f,%f,%f,%f,%f, %f\r\n",
 					  energy, zcr, peak, dominant_frequency, spectral_centroid, spectral_bandwidth);
-
-			  //end = HAL_GetTick();
-
-			  //total = end - start;
 
 			  HAL_UART_Transmit_DMA(&huart3, (uint8_t*)helper_string, chars); // transmit feature data
 		  }
