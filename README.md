@@ -4,12 +4,12 @@
 <p>
 An embedded sound classification system built on an STM32F446RE. The system samples microphone audio using ADC and DMA, extracts six time- and frequency-domain features on-device, and uses a decision tree trained with scikit-learn for classification. The trained model is converted to C and deployed back to the STM32 for on-device inference, with predictions displayed on an I2C LCD.
 
-**Pipeline:** Microphone → ADC/DMA Sampling → Feature Extraction →
+**Classification Pipeline:** Microphone → ADC/DMA Sampling → Feature Extraction →
 Decision Tree → LCD Prediction
 
-<p style="text-align: center;">
-<img src="figures/Deployment/overview_img.jpg" alt="" width="70%">
-<p style="text-align: right;">
+<p align="center">
+  <img src="figures/Deployment/overview_img.jpg" alt="" width="70%">
+</p>
 
 **Specifications:**
 
@@ -33,6 +33,14 @@ MAX9814 Electret Microphone Amplifier — Automatic Gain Control (AGC)
 External SPST Toggle Switch — mode selection
 
 On-board User Push Button — sampling trigger
+
+USB-C to TTL serial adapter — host connection for an additional USART
+
+#### Hardware Schematic
+
+<p align="center">
+  <img src="figures/Deployment/SoundClassifierSchematic.svg" alt="Sound Classifier Hardware Schematic" width="90%">
+</p>
 
 #### Sampling
 
@@ -83,15 +91,15 @@ Processing end notification transmission time: 2.00 milliseconds
 
 ## Data Collection Pipeline
 
-#### MAX9814 → ADC → DMA → Sample Buffer → Feature Extraction → Six-Feature Vector → USART → Python → Database/Dataset → Model Training
+#### MAX9814 → ADC → DMA → Sample Buffer → Feature Extraction → Feature Vector → USART → Python → Database → Model Training
 
 ---
 
 ### Model Training & Testing ###
 
-<p style="text-align: right;">
+<p align="center">
 <img src="figures/Model T&T/run1/run_1_summary.png" alt="" width="30%" style="float: right; margin-left: 15px; margin-bottom: 5px;">
-<p style="text-align: right;">
+</p>
 
 #### *Run 1*
 
@@ -125,9 +133,9 @@ Experimental change: Varied the random states of the KFold splitter and decision
 
 Mean 5-fold CV accuracy: 49-52%
 
-<p style="text-align: center;">
+<p align="center">
 <img src="figures/Model T&T/run2/run_2_summary.png" alt="" width="80%">
-<p style="text-align: right;">
+</p>
 
 Observations: Even with more data, the results are underwhelming.
 
@@ -151,19 +159,19 @@ Although larger max depths resulted in slightly higher average accuracies, the m
 
 Average accuracy across different maximum tree depths:
 
-<p style="text-align: center;">
+<p align="center">
 <img src="figures/Model T&T/run3/max_depth_summary.png" alt="" width="80%">
-<p style="text-align: right;">
+</p>
 
 Final decision tree (max depth = 10, random state = 42):
 
-<p style="text-align: center;">
+<p align="center">
 <img src="figures/Model T&T/run3/run_3_summary.png" alt="" width="80%">
-<p style="text-align: right;">
+</p>
 
-<p style="text-align: center;">
+<p align="center">
 <img src="figures/Model T&T/run3/tree_visualization.png" alt="" width="80%">
-<p style="text-align: right;">
+</p>
 
 Observations: Mean cross-validation accuracy has improved from approximately 50% in Run 2 to approximately 76% in Run 3.
 
@@ -189,7 +197,7 @@ STM32 integration: The generated model was integrated into the STM32 firmware th
 
 Inference timing:
 
-<p style="text-align: center;">
+<p align="center">
 <img src="figures/Deployment/inference_summary.png" alt="" width="80%">
 </p>
 
@@ -205,13 +213,13 @@ Maximum observed inference time: 8.33 microseconds (door)
 
 LCD output:
 
-<p style="text-align: center;">
+<p align="center">
 <img src="figures/Deployment/classify_img.jpg" alt="" width="50%">
-<p style="text-align: right;">
+</p>
 
-<p style="text-align: center;">
+<p align="center">
 <img src="figures/Deployment/collect_img.jpg" alt="" width="50%">
-<p style="text-align: right;">
+</p>
 
 <p style="text-align: center;">
 Boot → initialization message
